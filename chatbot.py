@@ -139,17 +139,17 @@ def load_chat_history(session_id):
     return [{"role": r[0], "content": r[1]} for r in rows]
 
 
-# --- 4. Persistent Authentication & Cookie Sync ---
+# --- 4. Persistent Authentication & Cookie Sync (Safe Defaults) ---
 
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.username = ""
-    st.session_state.user_role = ""
+    st.session_state.user_role = "Procurement Manager"
 
 if not st.session_state.authenticated and cookies.get("authenticated") == "true":
     st.session_state.authenticated = True
-    st.session_state.username = cookies.get("username", "")
-    st.session_state.user_role = cookies.get("user_role", "")
+    st.session_state.username = cookies.get("username", "admin")
+    st.session_state.user_role = cookies.get("user_role", "Procurement Manager")
 
 if not st.session_state.authenticated:
     st.title("🔐 Enterprise Supply Chain Login & Security Gate")
@@ -199,8 +199,11 @@ if not st.session_state.authenticated:
 
 # --- 5. Multi-Session Sidebar & Controls ---
 
-st.sidebar.title(f"👤 User: {st.session_state.username}")
-st.sidebar.markdown(f"**Role:** `{st.session_state.user_role}`")
+current_username = st.session_state.get("username", "admin")
+current_role = st.session_state.get("user_role", "Procurement Manager")
+
+st.sidebar.title(f"👤 User: {current_username}")
+st.sidebar.markdown(f"**Role:** `{current_role}`")
 st.sidebar.markdown("---")
 
 groq_api_key = os.environ.get("GROQ_API_KEY")
@@ -228,16 +231,16 @@ if uploaded_pdfs:
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("💬 Chat Sessions")
-user_sessions = get_user_sessions(st.session_state.username)
+user_sessions = get_user_sessions(current_username)
 if not user_sessions:
-    initial_sid = create_new_session(st.session_state.username, title="Supply Chain Intelligence Chat")
-    user_sessions = get_user_sessions(st.session_state.username)
+    initial_sid = create_new_session(current_username, title="Supply Chain Intelligence Chat")
+    user_sessions = get_user_sessions(current_username)
 
 if "current_session_id" not in st.session_state:
     st.session_state.current_session_id = user_sessions[0]["session_id"]
 
 if st.sidebar.button("➕ Start New Chat", use_container_width=True):
-    new_sid = create_new_session(st.session_state.username, title=f"Session {datetime.now().strftime('%b %d, %H:%M')}")
+    new_sid = create_new_session(current_username, title=f"Session {datetime.now().strftime('%b %d, %H:%M')}")
     st.session_state.current_session_id = new_sid
     st.rerun()
 
@@ -254,7 +257,7 @@ st.sidebar.info("🌐 GIS Mapping, Time-Series Forecasting & Multi-Agent RAG Act
 if st.sidebar.button("🚪 Logout", use_container_width=True):
     st.session_state.authenticated = False
     st.session_state.username = ""
-    st.session_state.user_role = ""
+    st.session_state.user_role = "Procurement Manager"
     
     cookies["authenticated"] = "false"
     cookies["username"] = ""
@@ -304,7 +307,7 @@ class SupplyChainState(TypedDict):
     finance_review: str
     final_output: str
 
-def init_multi_agent_network(api_key: str):
+def init_multi_agent_network(api_key: str, user_role: str):
     llm = ChatGroq(model="openai/gpt-oss-20b", temperature=0, groq_api_key=api_key)
     workflow = StateGraph(SupplyChainState)
 
@@ -354,7 +357,6 @@ def init_multi_agent_network(api_key: str):
         r_review = state.get("risk_review", "")
         f_review = state.get("finance_review", "")
         rag_info = state.get("rag_context", "")
-        user_role = st.session_state.user_role
         
         system_msg = SystemMessage(content=f"You are the Lead Synthesizer Agent. User role is '{user_role}'. Synthesize reviews into an executive recommendation.")
         synthesis_prompt = f"Document Excerpts: {rag_info}\n\nProcurement: {p_review}\nRisk: {r_review}\nFinance: {f_review}\nProvide final recommendation."
@@ -381,28 +383,27 @@ def init_multi_agent_network(api_key: str):
 # --- 8. Main Dashboard Interface with Tabs ---
 
 st.title("🌐 Enterprise Supply Chain Intelligence Platform")
-st.markdown(f"**Active Session:** `{st.session_state.current_session_id}` | **User Role:** `{st.session_state.user_role}`")
+st.markdown(f"**Active Session:** `{st.session_state.get('current_session_id', 'Default')}` | **User Role:** `{current_role}`")
 
 tab1, tab2, tab3 = st.tabs(["💬 Multi-Agent Chat & RAG", "🗺️ Interactive GIS Route Map", "📈 Time-Series Demand Forecasting"])
 
 # --- TAB 1: Chat & RAG Interface ---
 with tab1:
-    current_sid = st.session_state.current_session_id
+    current_sid = st.session_state.get("current_session_id", "Default")
     session_messages = load_chat_history(current_sid)
 
     if not session_messages:
-        initial_msg = f"Hello {st.session_state.username}! Multi-Agent RAG active. Ask questions about contracts, POs, or supplier bids."
+        initial_msg = f"Hello {current_username}! Multi-Agent RAG active. Ask questions about contracts, POs, or supplier bids."
         session_messages = [{"role": "assistant", "content": initial_msg}]
-        save_chat_message(current_sid, st.session_state.username, "assistant", initial_msg)
+        save_chat_message(current_sid, current_username, "assistant", initial_msg)
 
-    # Render message history
     for msg in session_messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    if "last_retrieved_chunks" in st.session_state and st.session_state.last_retrieved_chunks:
-        with st.expander("🔍 Debug: Inspect Last RAG Retrieved Chunks"):
-            st.text(st.session_state.last_retrieved_chunks)
+    # if "last_retrieved_chunks" in st.session_state and st.session_state.last_retrieved_chunks:
+    #     with st.expander("🔍 Debug: Inspect Last RAG Retrieved Chunks"):
+    #         st.text(st.session_state.last_retrieved_chunks)
 
 
 # --- TAB 2: Interactive GIS Route Mapping (PyDeck) ---
@@ -531,7 +532,7 @@ with tab3:
 
 # --- MAIN LEVEL STICKY CHAT INPUT ---
 if prompt := st.chat_input("Ask about supplier contracts, penalties, or purchase orders..."):
-    current_sid = st.session_state.current_session_id
+    current_sid = st.session_state.get("current_session_id", "Default")
 
     if not groq_api_key:
         st.error("⚠️ Please enter your Groq API Key in the sidebar.")
@@ -539,20 +540,20 @@ if prompt := st.chat_input("Ask about supplier contracts, penalties, or purchase
 
     if detect_prompt_injection(prompt):
         warning_msg = "🚨 Security Guardrail Triggered: Injection pattern detected."
-        save_chat_message(current_sid, st.session_state.username, "user", prompt)
-        save_chat_message(current_sid, st.session_state.username, "assistant", warning_msg)
+        save_chat_message(current_sid, current_username, "user", prompt)
+        save_chat_message(current_sid, current_username, "assistant", warning_msg)
         st.error(warning_msg)
         st.rerun()
 
-    is_allowed, rbac_message = enforce_role_permission(st.session_state.user_role, prompt)
+    is_allowed, rbac_message = enforce_role_permission(current_role, prompt)
     if not is_allowed:
-        save_chat_message(current_sid, st.session_state.username, "user", prompt)
-        save_chat_message(current_sid, st.session_state.username, "assistant", rbac_message)
+        save_chat_message(current_sid, current_username, "user", prompt)
+        save_chat_message(current_sid, current_username, "assistant", rbac_message)
         st.warning(rbac_message)
         st.rerun()
 
     sanitized_prompt = sanitize_pii(prompt)
-    save_chat_message(current_sid, st.session_state.username, "user", sanitized_prompt)
+    save_chat_message(current_sid, current_username, "user", sanitized_prompt)
 
     with tab1:
         with st.chat_message("user"):
@@ -565,16 +566,16 @@ if prompt := st.chat_input("Ask about supplier contracts, penalties, or purchase
                 st.write("🧠 Synthesizing final recommendation...")
                 
                 try:
-                    network = init_multi_agent_network(groq_api_key)
+                    network = init_multi_agent_network(groq_api_key, current_role)
                     initial_state = {"messages": [HumanMessage(content=sanitized_prompt)]}
                     result = network.invoke(initial_state)
                     
                     ai_response = sanitize_pii(result["final_output"])
                     status.update(label="✅ Review Complete!", state="complete", expanded=False)
                     st.markdown(ai_response)
-                    save_chat_message(current_sid, st.session_state.username, "assistant", ai_response)
+                    save_chat_message(current_sid, current_username, "assistant", ai_response)
                 except Exception as e:
                     err = f"Execution error: {e}"
                     st.error(err)
-                    save_chat_message(current_sid, st.session_state.username, "assistant", err)
+                    save_chat_message(current_sid, current_username, "assistant", err)
     st.rerun()
