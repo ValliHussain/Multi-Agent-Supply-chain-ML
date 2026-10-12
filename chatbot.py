@@ -7,6 +7,10 @@ import tempfile
 import numpy as np
 import pandas as pd
 import streamlit as st
+
+# --- 1. MUST BE THE VERY FIRST STREAMLIT COMMAND ---
+st.set_page_config(page_title="Enterprise Supply Chain Intelligence Platform", page_icon="🌐", layout="wide")
+
 from datetime import datetime, timedelta
 from typing import TypedDict, List
 
@@ -41,14 +45,12 @@ from guardrails import detect_prompt_injection, sanitize_pii, enforce_role_permi
 # Ensure DB tables are initialized
 init_db()
 
-st.set_page_config(page_title="Enterprise Supply Chain Intelligence Platform", page_icon="🌐", layout="wide")
-
 # --- Initialize Cookie Manager ---
 cookies = EncryptedCookieManager(prefix="enterprise_supply_chain/", password="supply_chain_secret_cookie_key")
 if not cookies.ready():
     st.stop()
 
-# --- 1. Vector Store & RAG Initialization ---
+# --- 2. Vector Store & RAG Initialization ---
 PERSIST_DIRECTORY = "./chroma_db"
 
 @st.cache_resource
@@ -80,7 +82,7 @@ def process_and_store_pdf(uploaded_file):
         return False, str(e)
 
 
-# --- 2. Database Helper Functions for Sessions & Auth ---
+# --- 3. Database Helper Functions for Sessions & Auth ---
 
 def verify_user(username, password):
     conn = sqlite3.connect("supply_chain.db")
@@ -137,7 +139,7 @@ def load_chat_history(session_id):
     return [{"role": r[0], "content": r[1]} for r in rows]
 
 
-# --- 3. Persistent Authentication & Cookie Sync ---
+# --- 4. Persistent Authentication & Cookie Sync ---
 
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
@@ -195,7 +197,7 @@ if not st.session_state.authenticated:
     st.stop()
 
 
-# --- 4. Multi-Session Sidebar & Controls ---
+# --- 5. Multi-Session Sidebar & Controls ---
 
 st.sidebar.title(f"👤 User: {st.session_state.username}")
 st.sidebar.markdown(f"**Role:** `{st.session_state.user_role}`")
@@ -261,7 +263,7 @@ if st.sidebar.button("🚪 Logout", use_container_width=True):
     st.rerun()
 
 
-# --- 5. RAG Retrieval & Advanced Tools ---
+# --- 6. RAG Retrieval & Advanced Tools ---
 
 @tool
 def query_uploaded_contracts(query: str) -> str:
@@ -278,7 +280,7 @@ def query_uploaded_contracts(query: str) -> str:
         return f"Error querying vector database: {e}"
 
 
-# --- 6. Rate-Limit Resilient Multi-Agent Network ---
+# --- 7. Rate-Limit Resilient Multi-Agent Network ---
 
 def safe_llm_invoke(llm, messages, max_retries=3):
     for attempt in range(max_retries):
@@ -376,7 +378,7 @@ def init_multi_agent_network(api_key: str):
     return workflow.compile()
 
 
-# --- 7. Main Dashboard Interface with Tabs ---
+# --- 8. Main Dashboard Interface with Tabs ---
 
 st.title("🌐 Enterprise Supply Chain Intelligence Platform")
 st.markdown(f"**Active Session:** `{st.session_state.current_session_id}` | **User Role:** `{st.session_state.user_role}`")
@@ -528,7 +530,6 @@ with tab3:
 
 
 # --- MAIN LEVEL STICKY CHAT INPUT ---
-# Rendered outside tabs so it remains natively pinned to the bottom of the viewport
 if prompt := st.chat_input("Ask about supplier contracts, penalties, or purchase orders..."):
     current_sid = st.session_state.current_session_id
 
